@@ -1,6 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import VanillaGlobeScene from '../components/VanillaGlobeScene'
-import Navbar from '../components/Navbar'
+import SolarSystemNavbar from '../components/SolarSystemNavbar'
 
 export default function AppLayout() {
   const location = useLocation()
@@ -11,8 +11,8 @@ export default function AppLayout() {
       {/* Globe background - hidden on visualiser page which has its own globe */}
       {!isVisualiserPage && <VanillaGlobeScene />}
 
-      {/* Navbar - hidden on visualiser page */}
-      {!isVisualiserPage && <Navbar />}
+      {/* Solar System Navbar - hidden on visualiser page */}
+      {!isVisualiserPage && <SolarSystemNavbar />}
 
       {/* Page content with smooth transitions */}
       <div className="relative">
