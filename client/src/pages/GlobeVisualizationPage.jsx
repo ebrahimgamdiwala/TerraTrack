@@ -10,13 +10,17 @@ import {
 } from '../components/AirQuality';
 import useOpenAQData from '../hooks/useOpenAQData';
 import useForestData from '../hooks/useForestData';
+import useSolarRadiationData from '../hooks/useSolarRadiationData';
 
 const GlobeVisualizationPage = () => {
     // Globe ref for external control
     const globeRef = useRef();
 
     // Dataset Selection
-    const [selectedDataset, setSelectedDataset] = useState('air_quality'); // 'air_quality' or 'forests'
+    const [selectedDataset, setSelectedDataset] = useState('air_quality'); // 'air_quality', 'forests', 'solar_radiation'
+
+    // Location count (default 50)
+    const [locationCount, setLocationCount] = useState(50);
 
     // Air Quality Data Hook
     const aqData = useOpenAQData();
@@ -24,8 +28,16 @@ const GlobeVisualizationPage = () => {
     // Forest Data Hook
     const forestData = useForestData();
 
+    // Solar Radiation Data Hook
+    const solarData = useSolarRadiationData();
+
     // Active Data Source
-    const activeData = selectedDataset === 'air_quality' ? aqData : forestData;
+    const activeData = useMemo(() => {
+        if (selectedDataset === 'solar_radiation') return solarData;
+        if (selectedDataset === 'forests') return forestData;
+        return aqData;
+    }, [selectedDataset, aqData, forestData, solarData]);
+
     const {
         measurements,
         loading,
@@ -69,10 +81,14 @@ const GlobeVisualizationPage = () => {
 
     // Load initial data when dataset changes
     useEffect(() => {
-        loadGlobeData(selectedPollutant);
+        if (selectedDataset === 'solar_radiation') {
+            loadGlobeData('shortwave_radiation', null, null, locationCount);
+        } else {
+            loadGlobeData(selectedPollutant);
+        }
         setSelectedLocation(null);
         setHistoricalData([]);
-    }, [selectedDataset, loadGlobeData]);
+    }, [selectedDataset, loadGlobeData, locationCount]);
 
     // Reload data when pollutant changes (only for AQ)
     useEffect(() => {
@@ -134,8 +150,12 @@ const GlobeVisualizationPage = () => {
 
     // Handle refresh
     const handleRefresh = useCallback(() => {
-        refreshData(selectedPollutant);
-    }, [refreshData, selectedPollutant]);
+        if (selectedDataset === 'solar_radiation') {
+            refreshData('shortwave_radiation', dateRange.start, dateRange.end, locationCount);
+        } else {
+            refreshData(selectedPollutant);
+        }
+    }, [refreshData, selectedPollutant, selectedDataset, dateRange, locationCount]);
 
     // Globe control handlers
     const handleZoomIn = useCallback(() => globeRef.current?.zoomIn(), []);
@@ -184,7 +204,7 @@ const GlobeVisualizationPage = () => {
             >
                 <button
                     onClick={() => setSelectedDataset('air_quality')}
-                    className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDataset === 'air_quality'
+                    className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDataset === 'air_quality'
                         ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                         }`}
@@ -193,12 +213,21 @@ const GlobeVisualizationPage = () => {
                 </button>
                 <button
                     onClick={() => setSelectedDataset('forests')}
-                    className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDataset === 'forests'
+                    className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDataset === 'forests'
                         ? 'bg-green-600 text-white shadow-lg shadow-green-600/20'
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                         }`}
                 >
                     Forests
+                </button>
+                <button
+                    onClick={() => setSelectedDataset('solar_radiation')}
+                    className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDataset === 'solar_radiation'
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                        }`}
+                >
+                    Solar Radiation
                 </button>
             </motion.div>
 
@@ -235,8 +264,12 @@ const GlobeVisualizationPage = () => {
                 onRefresh={handleRefresh}
                 isLoading={loading}
                 dataCount={measurements.length}
-                // Hide pollutant selector if forests selected
-                hidePollutantSelector={selectedDataset === 'forests'}
+                // Hide pollutant selector if forests or solar selected
+                hidePollutantSelector={selectedDataset === 'forests' || selectedDataset === 'solar_radiation'}
+                // Location count controls
+                locationCount={locationCount}
+                setLocationCount={setLocationCount}
+                selectedDataset={selectedDataset}
             />
 
             {/* AQI Legend (Only for Air Quality) */}
@@ -248,6 +281,63 @@ const GlobeVisualizationPage = () => {
                     className="fixed bottom-28 left-8 z-20"
                 >
                     <AQILegend data={filteredMeasurements} pollutant={selectedPollutant} />
+                </motion.div>
+            )}
+
+            {/* Solar Radiation Legend (Only for Solar Radiation) */}
+            {selectedDataset === 'solar_radiation' && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="fixed bottom-28 left-8 z-20"
+                >
+                    <div className="bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 p-4 w-64">
+                        <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+                            <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                            </svg>
+                            Solar Radiation (W/m²)
+                        </h3>
+
+                        {/* Color gradient bar */}
+                        <div className="h-3 rounded-lg mb-2" style={{
+                            background: 'linear-gradient(to right, #3b82f6, #22c55e, #eab308, #f97316, #ef4444)'
+                        }}></div>
+
+                        {/* Scale labels */}
+                        <div className="flex justify-between text-xs text-white/60 mb-3">
+                            <span>0</span>
+                            <span>250</span>
+                            <span>500</span>
+                            <span>750</span>
+                            <span>1000+</span>
+                        </div>
+
+                        {/* Color meanings */}
+                        <div className="space-y-1.5 pt-2 border-t border-white/10">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                                <span className="text-xs text-white/70">Low (night/cloudy)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                                <span className="text-xs text-white/70">Moderate (morning/evening)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                                <span className="text-xs text-white/70">Good (sunny)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+                                <span className="text-xs text-white/70">High (clear midday)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                                <span className="text-xs text-white/70">Very High (peak solar)</span>
+                            </div>
+                        </div>
+                    </div>
                 </motion.div>
             )}
 
@@ -272,6 +362,7 @@ const GlobeVisualizationPage = () => {
                     setIsPlaying={setIsPlaying}
                     playbackSpeed={playbackSpeed}
                     setPlaybackSpeed={setPlaybackSpeed}
+                    aggregation={aggregation}
                 />
             )}
 
@@ -283,7 +374,9 @@ const GlobeVisualizationPage = () => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <p className="text-xl font-medium text-white mb-2">Loading {selectedDataset === 'forests' ? 'Forest' : 'Air Quality'} Data</p>
+                        <p className="text-xl font-medium text-white mb-2">
+                            Loading {selectedDataset === 'forests' ? 'Forest' : selectedDataset === 'solar_radiation' ? 'Solar Radiation' : 'Air Quality'} Data
+                        </p>
                     </div>
                 </div>
             )}

@@ -9,14 +9,25 @@ const TimeControls = ({
     setIsPlaying,
     playbackSpeed = 1,
     setPlaybackSpeed,
+    aggregation = 'daily',
 }) => {
     const intervalRef = useRef(null);
 
-    // Sort dates and get unique ones
+    // Sort dates and get unique ones based on aggregation
     const sortedDates = useMemo(() => {
         const unique = [...new Set(availableDates.filter(Boolean))];
+
+        // Transform dates based on aggregation
+        if (aggregation === 'monthly') {
+            const monthlyDates = unique.map(d => d.substring(0, 7)); // YYYY-MM
+            return [...new Set(monthlyDates)].sort();
+        } else if (aggregation === 'yearly') {
+            const yearlyDates = unique.map(d => d.substring(0, 4)); // YYYY
+            return [...new Set(yearlyDates)].sort();
+        }
+
         return unique.sort((a, b) => new Date(a) - new Date(b));
-    }, [availableDates]);
+    }, [availableDates, aggregation]);
 
     // Current index in the sorted dates array
     const currentIndex = useMemo(() => {
@@ -68,6 +79,17 @@ const TimeControls = ({
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
         try {
+            if (aggregation === 'yearly') {
+                return dateStr; // Just return YYYY
+            }
+            if (aggregation === 'monthly') {
+                const [year, month] = dateStr.split('-');
+                const date = new Date(parseInt(year), parseInt(month) - 1);
+                return date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    year: 'numeric',
+                });
+            }
             const date = new Date(dateStr);
             return date.toLocaleDateString('en-US', {
                 month: 'short',

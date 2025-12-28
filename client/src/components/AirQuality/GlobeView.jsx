@@ -11,6 +11,16 @@ const getAQIColor = (value) => {
     return '#7e0023'; // Hazardous - Maroon
 };
 
+// Solar Radiation color scale (W/m²)
+const getSolarRadiationColor = (value) => {
+    if (value <= 100) return '#1e40af'; // Low - Dark Blue
+    if (value <= 300) return '#3b82f6'; // Low-Medium - Blue
+    if (value <= 500) return '#10b981'; // Medium - Green
+    if (value <= 700) return '#f59e0b'; // Medium-High - Amber
+    if (value <= 900) return '#f97316'; // High - Orange
+    return '#ef4444'; // Very High - Red
+};
+
 // Compute color scale from data range
 const computeColorScale = (data) => {
     if (!data || data.length === 0) return { min: 0, max: 100 };
@@ -26,7 +36,7 @@ const computeColorScale = (data) => {
 
 const GlobeView = forwardRef(({
     data = [],
-    visualizationMode = 'hex', // 'hex', 'points', 'bars', 'rings', 'labels'
+    visualizationMode = 'hex', // 'hex', 'points', 'bars', 'rings', 'labels', 'heatmap'
     autoRotate = true,
     autoRotateSpeed = 0.5,
     showAtmosphere = true,
@@ -129,7 +139,17 @@ const GlobeView = forwardRef(({
             if (value > 20) return '#84cc16'; // Lime
             return '#22c55e'; // Low loss (Green)
         }
+        if (datasetType === 'solar_radiation') {
+            return getSolarRadiationColor(value);
+        }
         return getAQIColor(value);
+    }, [datasetType]);
+
+    // Get unit based on dataset type
+    const getUnit = useCallback(() => {
+        if (datasetType === 'forests') return '%';
+        if (datasetType === 'solar_radiation') return 'W/m²';
+        return 'µg/m³';
     }, [datasetType]);
 
     // Tooltip content
@@ -145,7 +165,7 @@ const GlobeView = forwardRef(({
           <div style="font-weight: bold; margin-bottom: 4px;">${point?.city || 'Unknown'}</div>
           <div style="font-size: 12px; color: #aaa;">${point?.country || 'Unknown'}</div>
           <div style="font-size: 20px; font-weight: bold; color: ${getColor(avgValue)}; margin: 8px 0;">
-            ${avgValue.toFixed(1)} ${datasetType === 'forests' ? '%' : 'µg/m³'}
+            ${avgValue.toFixed(1)} ${getUnit()}
           </div>
           <div style="font-size: 11px; color: #666;">${d.points.length} stations</div>
         </div>
@@ -158,11 +178,11 @@ const GlobeView = forwardRef(({
         <div style="font-weight: bold; margin-bottom: 4px;">${d.city || 'Unknown'}</div>
         <div style="font-size: 12px; color: #aaa;">${d.country || 'Unknown'}</div>
         <div style="font-size: 20px; font-weight: bold; color: ${getColor(d.value)}; margin: 8px 0;">
-          ${d.value?.toFixed(1)} ${datasetType === 'forests' ? '%' : 'µg/m³'}
+          ${d.value?.toFixed(1)} ${getUnit()}
         </div>
       </div>
     `;
-    }, [getColor, datasetType]);
+    }, [getColor, datasetType, getUnit]);
 
     // Handle clicks
     const handlePointClick = useCallback((point) => {
@@ -205,11 +225,16 @@ const GlobeView = forwardRef(({
                 hexBinPointLat={d => d.lat}
                 hexBinPointLng={d => d.lng}
                 hexBinPointWeight={d => d.value || 1}
-                hexBinResolution={visualizationMode === 'bars' ? 12 : 3}
+                hexBinResolution={visualizationMode === 'bars' ? 4 : 3}
                 hexAltitude={d => {
                     if (visualizationMode === 'bars') {
-                        // Taller bars for 'bars' mode - increased scaling
-                        return Math.max(0.1, Math.min(d.sumWeight * 0.01, 2.0));
+                        // Calculate average value for better scaling
+                        const avgValue = d.sumWeight / (d.points?.length || 1);
+                        // Scale based on dataset type
+                        if (datasetType === 'solar_radiation') {
+                            return Math.max(0.05, Math.min(avgValue / 500, 0.8));
+                        }
+                        return Math.max(0.05, Math.min(avgValue / 50, 0.6));
                     }
                     // Standard altitude for 'hex' mode
                     return Math.max(0.01, Math.min(d.sumWeight * 0.001, 0.3));
@@ -219,7 +244,7 @@ const GlobeView = forwardRef(({
                 hexLabel={getTooltip}
                 onHexClick={handleHexClick}
                 hexBinMerge={false}
-                hexMargin={visualizationMode === 'bars' ? 0.2 : 0.1}
+                hexMargin={visualizationMode === 'bars' ? 0.4 : 0.1}
 
                 // Points layer (Used for 'points' mode)
                 pointsData={visualizationMode === 'points' ? globeData : []}
@@ -249,6 +274,17 @@ const GlobeView = forwardRef(({
                 labelDotRadius={0.3}
                 labelColor={d => getColor(d.value)}
                 labelResolution={2}
+
+                // Heatmaps layer (Used for 'heatmap' mode)
+                heatmapsData={visualizationMode === 'heatmap' ? [globeData] : []}
+                heatmapPoints={d => d}
+                heatmapPointLat={d => d.lat}
+                heatmapPointLng={d => d.lng}
+                heatmapPointWeight={d => d.value || 1}
+                heatmapTopAltitude={0.01}
+                heatmapBandwidth={datasetType === 'solar_radiation' ? 4 : 3}
+                heatmapColorSaturation={2.5}
+                onHeatmapClick={(d) => handlePointClick(d)}
 
                 animateIn={true}
             />

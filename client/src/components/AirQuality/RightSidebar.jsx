@@ -18,6 +18,7 @@ const VISUALIZATION_MODES = [
     { id: 'hex', name: 'Hexbins' },
     { id: 'points', name: 'Points' },
     { id: 'bars', name: '3D Bars' },
+    { id: 'heatmap', name: 'Heatmap' },
     { id: 'rings', name: 'Rings' },
     { id: 'labels', name: 'Labels' },
 ];
@@ -38,6 +39,9 @@ const RightSidebar = ({
     isLoading,
     dataCount,
     hidePollutantSelector = false,
+    locationCount = 50,
+    setLocationCount,
+    selectedDataset = 'air_quality',
 }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -199,6 +203,37 @@ const RightSidebar = ({
                                 </div>
                             </div>
 
+                            {/* Location Count Slider */}
+                            {setLocationCount && (
+                                <div className="space-y-3 mb-8">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Locations</h3>
+                                        <span className="text-sm font-medium text-emerald-400">{locationCount}</span>
+                                    </div>
+
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="59"
+                                        value={locationCount}
+                                        onChange={(e) => setLocationCount(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer
+                                            [&::-webkit-slider-thumb]:appearance-none
+                                            [&::-webkit-slider-thumb]:w-4
+                                            [&::-webkit-slider-thumb]:h-4
+                                            [&::-webkit-slider-thumb]:rounded-full
+                                            [&::-webkit-slider-thumb]:bg-emerald-400
+                                            [&::-webkit-slider-thumb]:cursor-pointer
+                                            [&::-webkit-slider-thumb]:transition-transform
+                                            [&::-webkit-slider-thumb]:hover:scale-125"
+                                    />
+                                    <div className="flex justify-between text-xs text-white/40">
+                                        <span>10</span>
+                                        <span>59 max</span>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Visualization Mode */}
                             <div className="space-y-3 mb-8">
                                 <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Visualization</h3>
@@ -257,7 +292,10 @@ const RightSidebar = ({
                             {/* Data Attribution */}
                             <div className="mt-8 pt-4 border-t border-white/10">
                                 <p className="text-xs text-white/30 text-center">
-                                    Data provided by <a href="https://openaq.org" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">OpenAQ</a>
+                                    Data provided by {selectedDataset === 'solar_radiation'
+                                        ? <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline">Open-Meteo</a>
+                                        : <a href="https://openaq.org" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">OpenAQ</a>
+                                    }
                                 </p>
                             </div>
                         </div>
