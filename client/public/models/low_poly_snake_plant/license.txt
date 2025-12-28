@@ -1,0 +1,8 @@
+Model Information:
+* title:	Low-poly snake plant
+* source:	https://sketchfab.com/3d-models/low-poly-snake-plant-237210b3b20a492c851c0145fe316ea7
+* author:	assetfactory (https://sketchfab.com/assetfactory)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

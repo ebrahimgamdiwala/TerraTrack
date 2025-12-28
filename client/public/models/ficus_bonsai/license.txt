@@ -1,0 +1,8 @@
+Model Information:
+* title:	Ficus Bonsai
+* source:	https://sketchfab.com/3d-models/ficus-bonsai-f420ea9edb914e1b9b7adebbacecc7d8
+* author:	Zgon (https://sketchfab.com/Z-gon)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

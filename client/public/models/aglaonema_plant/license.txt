@@ -1,0 +1,8 @@
+Model Information:
+* title:	Aglaonema plant
+* source:	https://sketchfab.com/3d-models/aglaonema-plant-d86685ec53fd487f93d350b6120fc3e0
+* author:	marq (https://sketchfab.com/marqtherefore)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

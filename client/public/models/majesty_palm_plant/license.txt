@@ -1,0 +1,8 @@
+Model Information:
+* title:	Majesty palm plant
+* source:	https://sketchfab.com/3d-models/majesty-palm-plant-0ee05be48d9e45b9b7e4000a59cbe6ba
+* author:	assetfactory (https://sketchfab.com/assetfactory)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

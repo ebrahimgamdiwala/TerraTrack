@@ -531,10 +531,31 @@ export default function SolarSystemNavbar() {
 
             <canvas
                 ref={canvasRef}
-                className="solar-canvas"
+                className={`solar-canvas ${isExpanded ? 'interactive' : ''}`}
                 onMouseMove={handleMouseMove}
                 onClick={handleClick}
             />
+
+            {!isExpanded && (
+                <div
+                    className="sun-trigger"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setIsExpanded(true)
+                    }}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '120px',
+                        height: '60px',
+                        cursor: 'pointer',
+                        zIndex: 1000,
+                        pointerEvents: 'auto',
+                    }}
+                />
+            )}
 
             {/* Orbit Labels */}
             {orbitLabels.map((label) => (

@@ -1,0 +1,8 @@
+Model Information:
+* title:	House palm plant
+* source:	https://sketchfab.com/3d-models/house-palm-plant-346a62f326824803bec27dc53703396a
+* author:	assetfactory (https://sketchfab.com/assetfactory)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works
