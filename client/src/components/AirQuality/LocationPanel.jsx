@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Line } from 'react-chartjs-2';
 import {
@@ -57,6 +58,20 @@ const LocationPanel = ({
     pollutant = 'pm25',
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
+    const navigate = useNavigate();
+
+    // Handle navigation to TerraBot with location data
+    const handleAnalyzeWithTerraBot = () => {
+        const params = new URLSearchParams({
+            city: location.city || '',
+            country: location.country || '',
+            lat: location.lat?.toString() || '',
+            lng: location.lng?.toString() || '',
+            value: location.value?.toString() || '',
+            pollutant: pollutant
+        });
+        navigate(`/terrabot?${params.toString()}`);
+    };
 
     // Compute statistics from historical data
     const stats = useMemo(() => {
@@ -204,21 +219,29 @@ const LocationPanel = ({
                     </div>
 
                     {/* Coordinates */}
-                    <div className="flex items-center gap-4 mt-4 text-xs text-white/40">
-                        <span className="flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            </svg>
-                            {location.lat?.toFixed(4)}°, {location.lng?.toFixed(4)}°
-                        </span>
-                        {location.provider && (
+                    <div className="flex items-center justify-between mt-4">
+                        <div className="flex items-center gap-4 text-xs text-white/40">
                             <span className="flex items-center gap-1">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                 </svg>
-                                {location.provider}
+                                {location.lat?.toFixed(4)}°, {location.lng?.toFixed(4)}°
                             </span>
-                        )}
+                            {location.provider && (
+                                <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    {location.provider}
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={handleAnalyzeWithTerraBot}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg text-white text-xs font-medium hover:from-emerald-600 hover:to-teal-600 transition-all shadow-lg shadow-emerald-500/20"
+                        >
+                            🤖 Analyze with TerraBot
+                        </button>
                     </div>
                 </div>
 
