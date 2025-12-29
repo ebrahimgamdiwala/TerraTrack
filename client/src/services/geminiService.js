@@ -10,16 +10,28 @@ class GeminiService {
     this.config = {
       responseMimeType: 'application/json',
     }
+    
+    // Store conversation history for follow-up questions
+    this.conversationHistory = []
+    this.maxHistoryLength = 10 // Keep last 10 exchanges
+  }
+
+  // Clear conversation history
+  clearHistory() {
+    this.conversationHistory = []
   }
 
   // Main method to analyze climate queries with web scraping
-  async analyzeClimateQuery(userQuery) {
+  async analyzeClimateQuery(userQuery, isNewConversation = false) {
     try {
-      // Enhanced prompt for climate analysis with web scraping and visualization
-      const enhancedPrompt = `
-You are TerraBot, an advanced AI climate data analyst. Your role is to provide comprehensive climate and environmental analysis with web scraping, visualization, and proper source citations.
+      // Clear history if this is a new conversation
+      if (isNewConversation) {
+        this.clearHistory()
+      }
 
-USER QUERY: "${userQuery}"
+      // System prompt for climate analysis
+      const systemPrompt = `
+You are TerraBot, an advanced AI climate data analyst. Your role is to provide comprehensive climate and environmental analysis with web scraping, visualization, and proper source citations.
 
 INSTRUCTIONS:
 1. **Web Scraping & Research**: Search for the most recent and relevant climate data, news, and research papers related to the user's query
@@ -27,6 +39,7 @@ INSTRUCTIONS:
 3. **Visualization**: When appropriate, suggest visualizations and provide sample data structures
 4. **Source Citation**: Always cite your sources with proper attribution
 5. **Actionable Insights**: Provide clear, actionable conclusions and recommendations
+6. **Context Awareness**: Use the conversation history to provide relevant follow-up responses
 
 RESPONSE FORMAT:
 You MUST respond with a valid JSON object matching this structure:
@@ -65,6 +78,12 @@ You MUST respond with a valid JSON object matching this structure:
   }
 }
 
+IMPORTANT JSON RULES:
+- Ensure all strings are properly escaped (especially newlines as \\n)
+- Do not include trailing commas in arrays or objects
+- Ensure all brackets and braces are properly closed
+- Keep the response concise to avoid truncation
+
 FOCUS AREAS:
 - Climate change trends and impacts
 - Environmental data analysis
@@ -74,16 +93,37 @@ FOCUS AREAS:
 - Renewable energy statistics  
 - Environmental policy and regulations
 - Conservation and biodiversity data
-
-Please provide a comprehensive, well-researched response with recent data, proper citations, and actionable insights. When suggesting visualizations, use realistic sample data that reflects current climate trends.
 `
 
+      // Build conversation contents with history
       const contents = [
         {
           role: 'user',
-          parts: [{ text: enhancedPrompt }]
+          parts: [{ text: systemPrompt }]
+        },
+        {
+          role: 'model',
+          parts: [{ text: '{"content": "I understand. I am TerraBot, ready to help with climate and environmental analysis. I will respond with properly formatted JSON.", "sources": [], "visualization": null}' }]
         }
       ]
+
+      // Add conversation history
+      for (const exchange of this.conversationHistory) {
+        contents.push({
+          role: 'user',
+          parts: [{ text: exchange.user }]
+        })
+        contents.push({
+          role: 'model', 
+          parts: [{ text: JSON.stringify(exchange.response) }]
+        })
+      }
+
+      // Add current user query
+      contents.push({
+        role: 'user',
+        parts: [{ text: userQuery }]
+      })
 
       const response = await this.ai.models.generateContentStream({
         model: this.model,
@@ -103,35 +143,51 @@ Please provide a comprehensive, well-researched response with recent data, prope
         }
       }
 
-      // Parse JSON response
+      // Parse JSON response with improved error handling
+      let parsedResponse = null
+      
       try {
-        const jsonResponse = JSON.parse(fullResponse)
-        if (jsonResponse && typeof jsonResponse === 'object') {
-          // Ensure the response has the expected structure
-          return {
-            content: jsonResponse.content || '',
-            sources: jsonResponse.sources || [],
-            visualization: jsonResponse.visualization || null
-          }
-        }
+        parsedResponse = JSON.parse(fullResponse)
       } catch (error) {
         console.warn('Direct JSON parse failed, trying extraction', error)
-        const jsonResponse = this.extractJSON(fullResponse)
-        if (jsonResponse && typeof jsonResponse === 'object') {
-          return {
-            content: jsonResponse.content || '',
-            sources: jsonResponse.sources || [],
-            visualization: jsonResponse.visualization || null
-          }
+        parsedResponse = this.extractJSON(fullResponse)
+      }
+
+      if (parsedResponse && typeof parsedResponse === 'object') {
+        const result = {
+          content: parsedResponse.content || '',
+          sources: Array.isArray(parsedResponse.sources) ? parsedResponse.sources : [],
+          visualization: parsedResponse.visualization || null
         }
+        
+        // Store successful exchange in conversation history
+        this.conversationHistory.push({
+          user: userQuery,
+          response: result
+        })
+        
+        // Trim history if it gets too long
+        if (this.conversationHistory.length > this.maxHistoryLength) {
+          this.conversationHistory = this.conversationHistory.slice(-this.maxHistoryLength)
+        }
+        
+        return result
       }
 
       // Fallback if JSON parsing fails completely but we have text
-      return {
-        content: fullResponse || 'I apologize, but I encountered an issue processing your request.',
+      const fallbackResult = {
+        content: this.cleanResponseText(fullResponse) || 'I apologize, but I encountered an issue processing your request.',
         sources: [],
         visualization: null
       }
+      
+      // Still store in history even if parsing failed
+      this.conversationHistory.push({
+        user: userQuery,
+        response: fallbackResult
+      })
+      
+      return fallbackResult
 
     } catch (error) {
       console.error('Error in Gemini service:', error)
@@ -158,21 +214,130 @@ Please provide a comprehensive, well-researched response with recent data, prope
     }
   }
 
-  // Extract JSON from response text
+  // Clean response text when JSON parsing fails
+  cleanResponseText(text) {
+    if (!text) return ''
+    
+    // Remove markdown code blocks
+    let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+    
+    // Try to extract just the content field if it exists
+    const contentMatch = cleaned.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/s)
+    if (contentMatch) {
+      try {
+        return JSON.parse(`"${contentMatch[1]}"`)
+      } catch {
+        return contentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+      }
+    }
+    
+    return cleaned.trim()
+  }
+
+  // Extract JSON from response text with improved handling
   extractJSON(text) {
+    if (!text) return null
+    
     try {
-      // Look for JSON block in the response
-      const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        const jsonString = jsonMatch[1] || jsonMatch[0]
-        return JSON.parse(jsonString)
+      // First, try to find JSON code block
+      const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+      if (codeBlockMatch) {
+        const parsed = this.tryParseJSON(codeBlockMatch[1])
+        if (parsed) return parsed
       }
 
-      // If no JSON block found, and direct parse failed, return null
+      // Try to find a JSON object directly
+      const jsonObjectMatch = text.match(/\{[\s\S]*\}/)
+      if (jsonObjectMatch) {
+        const parsed = this.tryParseJSON(jsonObjectMatch[0])
+        if (parsed) return parsed
+      }
+
       return null
     } catch (error) {
       console.warn('JSON extraction failed:', error)
       return null
+    }
+  }
+
+  // Try to parse JSON with automatic fixing of common issues
+  tryParseJSON(jsonString) {
+    if (!jsonString) return null
+    
+    // First try direct parse
+    try {
+      return JSON.parse(jsonString)
+    } catch (e) {
+      // Continue to try fixes
+    }
+
+    let fixed = jsonString.trim()
+    
+    try {
+      // Fix 1: Remove trailing commas before ] or }
+      fixed = fixed.replace(/,(\s*[}\]])/g, '$1')
+      
+      // Fix 2: Try to find balanced braces - the JSON might be truncated
+      let braceCount = 0
+      let bracketCount = 0
+      let lastValidIndex = 0
+      
+      for (let i = 0; i < fixed.length; i++) {
+        const char = fixed[i]
+        if (char === '{') braceCount++
+        else if (char === '}') {
+          braceCount--
+          if (braceCount === 0 && bracketCount === 0) {
+            lastValidIndex = i + 1
+          }
+        }
+        else if (char === '[') bracketCount++
+        else if (char === ']') bracketCount--
+      }
+      
+      // If unbalanced, try to truncate at last valid position or close brackets
+      if (braceCount !== 0 || bracketCount !== 0) {
+        if (lastValidIndex > 0 && lastValidIndex < fixed.length) {
+          fixed = fixed.substring(0, lastValidIndex)
+        } else {
+          // Try to close open braces/brackets
+          while (bracketCount > 0) {
+            fixed += ']'
+            bracketCount--
+          }
+          while (braceCount > 0) {
+            fixed += '}'
+            braceCount--
+          }
+        }
+      }
+      
+      return JSON.parse(fixed)
+    } catch (e) {
+      // Fix 3: Try to extract just content, sources, visualization fields
+      try {
+        const contentMatch = fixed.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/s)
+        const content = contentMatch ? JSON.parse(`"${contentMatch[1]}"`) : ''
+        
+        // Try to extract sources array
+        let sources = []
+        const sourcesMatch = fixed.match(/"sources"\s*:\s*(\[[\s\S]*?\])(?=\s*[,}])/s)
+        if (sourcesMatch) {
+          try {
+            sources = JSON.parse(sourcesMatch[1])
+          } catch {
+            sources = []
+          }
+        }
+        
+        return {
+          content,
+          sources,
+          visualization: null
+        }
+      } catch {
+        return null
+      }
     }
   }
 

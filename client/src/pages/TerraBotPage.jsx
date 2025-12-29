@@ -460,6 +460,8 @@ Make the analysis specific to ${locationData.city} and current conditions.
   const clearChat = () => {
     hasTriggeredAutoAnalysis.current = false
     setAnalysisData(null)
+    // Clear the conversation history in the gemini service
+    geminiService.clearHistory()
     setMessages([{
       id: 1,
       type: 'bot',
