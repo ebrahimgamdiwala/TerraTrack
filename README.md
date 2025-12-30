@@ -9,7 +9,7 @@ TerraTrack is a cutting-edge environmental monitoring and AR visualization platf
 ## ✨ Key Features
 
 ### 🎯 *Environmental Tracking & Analytics*
-- **Interactive Dashboard**: Real-time environmental metrics with NDVI, NDWI, and custom analysis types
+- **Interactive Dashboard**: Real-time environmental metrics with NDVI, NDWI, and custom analysis types.
 - **Google Maps Integration**: Point-and-click environmental analysis with reverse geocoding
 - **AI Location Analysis**: Gemini-powered environmental insights for any location
 - **Environmental News Feed**: Curated news from multiple sources (NewsAPI, GNews, NewsData, Currents API) with India priority
