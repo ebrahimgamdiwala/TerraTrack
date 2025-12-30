@@ -289,66 +289,6 @@ async def get_visualization(analysis_id: str):
     
     return FileResponse(str(image_path), media_type="image/png")
 
-@app.get("/api/results/{analysis_id}/visualizations")
-async def get_visualization_list(analysis_id: str):
-    """Get list of individual visualization images"""
-    # Find analysis directory
-    analysis_dirs = [d for d in UPLOAD_DIR.iterdir() if d.is_dir() and d.name.startswith(analysis_id)]
-    
-    if not analysis_dirs:
-        raise HTTPException(status_code=404, detail="Analysis not found")
-    
-    analysis_dir = analysis_dirs[0]
-    response_path = analysis_dir / "response.json"
-    
-    with open(response_path, 'r') as f:
-        response = json.load(f)
-    
-    result_folder = response.get('result_folder')
-    if not result_folder:
-        raise HTTPException(status_code=404, detail="Visualizations not found")
-    
-    viz_dir = BASE_DIR / 'results' / result_folder / 'visualizations'
-    
-    if not viz_dir.exists():
-        raise HTTPException(status_code=404, detail="Visualizations directory not found")
-    
-    # Get list of visualization files
-    viz_files = sorted([f.name for f in viz_dir.iterdir() if f.suffix == '.png'])
-    
-    return JSONResponse(content={
-        "analysis_id": analysis_id,
-        "result_folder": result_folder,
-        "visualizations": viz_files,
-        "count": len(viz_files)
-    })
-
-@app.get("/api/results/{analysis_id}/visualizations/{filename}")
-async def get_individual_visualization(analysis_id: str, filename: str):
-    """Get a specific visualization image"""
-    # Find analysis directory
-    analysis_dirs = [d for d in UPLOAD_DIR.iterdir() if d.is_dir() and d.name.startswith(analysis_id)]
-    
-    if not analysis_dirs:
-        raise HTTPException(status_code=404, detail="Analysis not found")
-    
-    analysis_dir = analysis_dirs[0]
-    response_path = analysis_dir / "response.json"
-    
-    with open(response_path, 'r') as f:
-        response = json.load(f)
-    
-    result_folder = response.get('result_folder')
-    if not result_folder:
-        raise HTTPException(status_code=404, detail="Visualization not found")
-    
-    image_path = BASE_DIR / 'results' / result_folder / 'visualizations' / filename
-    
-    if not image_path.exists():
-        raise HTTPException(status_code=404, detail=f"Visualization {filename} not found")
-    
-    return FileResponse(str(image_path), media_type="image/png")
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

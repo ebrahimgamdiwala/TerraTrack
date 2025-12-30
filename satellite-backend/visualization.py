@@ -45,6 +45,140 @@ class ChangeVisualizer:
     def create_change_visualization(self, bands1, bands2, change_map, 
                                    vegetation_map, urban_map, output_path):
         """Create comprehensive visualization of all changes"""
+        import os
+        
+        # Create directory for individual visualizations
+        output_dir = os.path.dirname(output_path)
+        viz_dir = os.path.join(output_dir, 'visualizations')
+        os.makedirs(viz_dir, exist_ok=True)
+        
+        # RGB composites
+        rgb1 = self.create_rgb_composite(bands1)
+        rgb2 = self.create_rgb_composite(bands2)
+        
+        # False color composites
+        fc1 = self.create_false_color(bands1)
+        fc2 = self.create_false_color(bands2)
+        
+        # Calculate indices
+        red1, nir1 = bands1[3], bands1[7]
+        red2, nir2 = bands2[3], bands2[7]
+        ndvi1 = (nir1 - red1) / (nir1 + red1 + 1e-8)
+        ndvi2 = (nir2 - red2) / (nir2 + red2 + 1e-8)
+        ndvi_diff = ndvi2 - ndvi1
+        
+        # Prepare classification maps
+        veg_class = np.argmax(vegetation_map, axis=0)
+        veg_colored = np.zeros((*veg_class.shape, 3))
+        veg_colored[veg_class == 0] = self.colors['no_change']
+        veg_colored[veg_class == 1] = self.colors['vegetation_increase']
+        veg_colored[veg_class == 2] = self.colors['vegetation_decrease']
+        
+        urban_class = np.argmax(urban_map, axis=0)
+        urban_colored = np.zeros((*urban_class.shape, 3))
+        urban_colored[urban_class == 0] = self.colors['no_change']
+        urban_colored[urban_class == 1] = self.colors['urban_construction']
+        urban_colored[urban_class == 2] = self.colors['urban_demolition']
+        
+        # Change overlay
+        overlay = rgb2.copy().astype(np.float32)
+        change_overlay = self.create_change_overlay(change_map).astype(np.float32)
+        combined = cv2.addWeighted(overlay, 0.6, change_overlay, 0.4, 0)
+        combined = np.clip(combined, 0, 1)
+        
+        # Save individual visualizations
+        visualizations = []
+        
+        # 1. RGB Before
+        self._save_single_viz(rgb1, 'Before (RGB)', 
+                             os.path.join(viz_dir, '01_rgb_before.png'))
+        visualizations.append('01_rgb_before.png')
+        
+        # 2. RGB After
+        self._save_single_viz(rgb2, 'After (RGB)', 
+                             os.path.join(viz_dir, '02_rgb_after.png'))
+        visualizations.append('02_rgb_after.png')
+        
+        # 3. False Color Before
+        self._save_single_viz(fc1, 'Before (False Color - NIR/Red/Green)', 
+                             os.path.join(viz_dir, '03_false_color_before.png'))
+        visualizations.append('03_false_color_before.png')
+        
+        # 4. False Color After
+        self._save_single_viz(fc2, 'After (False Color - NIR/Red/Green)', 
+                             os.path.join(viz_dir, '04_false_color_after.png'))
+        visualizations.append('04_false_color_after.png')
+        
+        # 5. Overall Change Detection
+        self._save_single_viz_with_colorbar(change_map, 'Overall Change Detection', 
+                                           os.path.join(viz_dir, '05_change_detection.png'),
+                                           cmap='hot', vmin=0, vmax=1)
+        visualizations.append('05_change_detection.png')
+        
+        # 6. Vegetation Changes
+        self._save_single_viz(veg_colored, 'Vegetation Changes', 
+                             os.path.join(viz_dir, '06_vegetation_changes.png'))
+        visualizations.append('06_vegetation_changes.png')
+        
+        # 7. Urban Changes
+        self._save_single_viz(urban_colored, 'Urban Changes', 
+                             os.path.join(viz_dir, '07_urban_changes.png'))
+        visualizations.append('07_urban_changes.png')
+        
+        # 8. Change Overlay
+        self._save_single_viz(combined, 'Change Overlay on After Image', 
+                             os.path.join(viz_dir, '08_change_overlay.png'))
+        visualizations.append('08_change_overlay.png')
+        
+        # 9. NDVI Before
+        self._save_single_viz_with_colorbar(ndvi1, 'NDVI Before', 
+                                           os.path.join(viz_dir, '09_ndvi_before.png'),
+                                           cmap='RdYlGn', vmin=-1, vmax=1)
+        visualizations.append('09_ndvi_before.png')
+        
+        # 10. NDVI After
+        self._save_single_viz_with_colorbar(ndvi2, 'NDVI After', 
+                                           os.path.join(viz_dir, '10_ndvi_after.png'),
+                                           cmap='RdYlGn', vmin=-1, vmax=1)
+        visualizations.append('10_ndvi_after.png')
+        
+        # 11. NDVI Change
+        self._save_single_viz_with_colorbar(ndvi_diff, 'NDVI Change (After - Before)', 
+                                           os.path.join(viz_dir, '11_ndvi_change.png'),
+                                           cmap='RdYlGn', vmin=-0.5, vmax=0.5)
+        visualizations.append('11_ndvi_change.png')
+        
+        # Also create the combined visualization for backward compatibility
+        self._create_combined_visualization(bands1, bands2, change_map, 
+                                          vegetation_map, urban_map, output_path)
+        
+        print(f"✓ {len(visualizations)} individual visualizations saved to: {viz_dir}")
+        return visualizations
+    
+    def _save_single_viz(self, image, title, output_path):
+        """Save a single visualization without colorbar"""
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.imshow(image)
+        ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
+        ax.axis('off')
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _save_single_viz_with_colorbar(self, data, title, output_path, cmap='viridis', vmin=None, vmax=None):
+        """Save a single visualization with colorbar"""
+        fig, ax = plt.subplots(figsize=(10, 8))
+        im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
+        ax.axis('off')
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _create_combined_visualization(self, bands1, bands2, change_map, 
+                                      vegetation_map, urban_map, output_path):
+        """Create the original combined visualization (for backward compatibility)"""
         fig = plt.figure(figsize=(20, 12))
         gs = GridSpec(3, 4, figure=fig, hspace=0.3, wspace=0.3)
         
@@ -160,4 +294,4 @@ class ChangeVisualizer:
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         plt.close()
         
-        print(f"Visualization saved to: {output_path}")
+        print(f"✓ Combined visualization saved to: {output_path}")

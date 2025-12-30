@@ -16,8 +16,10 @@ import {
 } from 'chart.js'
 import ChatMessage from '../components/ChatMessage'
 import ChatInput from '../components/ChatInput'
+import ChatInputEnhanced from '../components/ChatInputEnhanced'
 import VisualizationDisplay from '../components/VisualizationDisplay'
 import SourceCitations from '../components/SourceCitations'
+import SatelliteResults from '../components/SatelliteResults'
 import { geminiService } from '../services/geminiService'
 import { toast } from 'react-hot-toast'
 
@@ -58,6 +60,8 @@ const TerraBotPage = () => {
   const [historicalData, setHistoricalData] = useState(null)
   const [rightPanelWidth, setRightPanelWidth] = useState(420)
   const [isResizing, setIsResizing] = useState(false)
+  const [satelliteResults, setSatelliteResults] = useState(null)
+  const [satelliteImages, setSatelliteImages] = useState([])
   const messagesEndRef = useRef(null)
   const hasTriggeredAutoAnalysis = useRef(false)
 
@@ -460,6 +464,8 @@ Make the analysis specific to ${locationData.city} and current conditions.
   const clearChat = () => {
     hasTriggeredAutoAnalysis.current = false
     setAnalysisData(null)
+    setSatelliteResults(null)
+    setSatelliteImages([])
     // Clear the conversation history in the gemini service
     geminiService.clearHistory()
     setMessages([{
@@ -472,6 +478,126 @@ Make the analysis specific to ${locationData.city} and current conditions.
       sources: [],
       visualization: null
     }])
+  }
+
+  // Handle satellite image analysis
+  const handleSatelliteAnalysis = async ({ beforeImage, afterImage, location }) => {
+    setIsLoading(true)
+    setIsTyping(true)
+    setSatelliteResults(null)
+    setSatelliteImages([])
+
+    // Add user message
+    const userMessage = {
+      id: Date.now(),
+      type: 'user',
+      content: `🛰️ Analyzing satellite images for ${location}`,
+      timestamp: new Date()
+    }
+    setMessages(prev => [...prev, userMessage])
+
+    try {
+      const formData = new FormData()
+      formData.append('before_images', beforeImage)
+      formData.append('after_images', afterImage)
+      formData.append('location', location)
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      const response = await axios.post(`${API_URL}/api/satellite/analyze`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 180000, // 3 minutes
+      })
+
+      // Store satellite results for chat panel (metrics will be shown there)
+      setSatelliteResults(response.data)
+
+      // Get list of individual visualizations
+      const vizListResponse = await axios.get(`${API_URL}/api/satellite/results/${response.data.analysis_id}/visualizations`)
+      
+      // Create URLs for all individual visualizations
+      const vizUrls = vizListResponse.data.visualizations.map(filename => 
+        `${API_URL}/api/satellite/results/${response.data.analysis_id}/visualizations/${filename}`
+      )
+      setSatelliteImages(vizUrls)
+
+      // Create bot message with LLM explanations AND metrics
+      const llmContent = response.data.data.llm_explanations
+      const metrics = response.data.data
+      
+      let messageContent = `## 🛰️ Satellite Analysis Complete for ${location}\n\n`
+
+      // Add metrics tables to chat
+      messageContent += `### 📊 Analysis Metrics\n\n`
+      
+      // Vegetation metrics
+      messageContent += `**🌳 Vegetation Changes:**\n`
+      messageContent += `- Increase: +${metrics.vegetation_analysis.vegetation_increase_percent.toFixed(2)}%\n`
+      messageContent += `- Decrease: -${metrics.vegetation_analysis.vegetation_decrease_percent.toFixed(2)}%\n`
+      messageContent += `- NDVI Change: ${metrics.vegetation_analysis.mean_ndvi_change.toFixed(4)}\n\n`
+      
+      // Urban metrics
+      messageContent += `**🏗️ Urban Development:**\n`
+      messageContent += `- Urbanization: ${metrics.urban_analysis.urbanization_percent.toFixed(2)}%\n`
+      messageContent += `- Construction Area: ${metrics.urban_analysis.construction_area_km2.toFixed(2)} km²\n`
+      messageContent += `- NDBI Change: ${metrics.urban_analysis.mean_ndbi_change.toFixed(4)}\n\n`
+      
+      // Water metrics
+      messageContent += `**💧 Water Bodies:**\n`
+      messageContent += `- Increase: +${metrics.water_analysis.water_increase_percent.toFixed(2)}%\n`
+      messageContent += `- Decrease: -${metrics.water_analysis.water_decrease_percent.toFixed(2)}%\n`
+      messageContent += `- Net Change: ${(metrics.water_analysis.water_gain_area_km2 - metrics.water_analysis.water_loss_area_km2).toFixed(2)} km²\n\n`
+
+      // Add LLM explanations
+      if (llmContent) {
+        if (llmContent.executive_summary) {
+          messageContent += `### Executive Summary\n${llmContent.executive_summary}\n\n`
+        }
+        if (llmContent.detailed_analysis) {
+          messageContent += `### Detailed Analysis\n${llmContent.detailed_analysis}\n\n`
+        }
+        if (llmContent.environmental_impact) {
+          messageContent += `### Environmental Impact\n${llmContent.environmental_impact}\n\n`
+        }
+        if (llmContent.recommendations) {
+          messageContent += `### Recommendations\n${llmContent.recommendations}\n\n`
+        }
+        if (llmContent.key_insights) {
+          messageContent += `### Key Insights\n${llmContent.key_insights}\n\n`
+        }
+      }
+
+      const botMessage = {
+        id: Date.now() + 1,
+        type: 'bot',
+        content: messageContent,
+        timestamp: new Date(),
+        sources: [],
+        visualization: null
+      }
+
+      setMessages(prev => [...prev, botMessage])
+      toast.success('Satellite analysis complete!')
+
+    } catch (error) {
+      console.error('Satellite analysis error:', error)
+      toast.error(error.response?.data?.detail || 'Analysis failed. Please try again.')
+
+      const errorMessage = {
+        id: Date.now() + 1,
+        type: 'bot',
+        content: `❌ I encountered an error analyzing the satellite images: ${error.response?.data?.detail || error.message}. Please try again with different images.`,
+        timestamp: new Date(),
+        sources: [],
+        visualization: null
+      }
+
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+      setIsTyping(false)
+    }
   }
 
   // Ensure message content is a string, even if it's a JSON string
@@ -613,8 +739,9 @@ Make the analysis specific to ${locationData.city} and current conditions.
 
           {/* Chat Input */}
           <div className="p-4 border-t border-white/10 bg-black/40">
-            <ChatInput
+            <ChatInputEnhanced
               onSendMessage={handleSendMessage}
+              onSatelliteAnalysis={handleSatelliteAnalysis}
               isLoading={isLoading || isAnalyzing}
               placeholder={hasLocationData
                 ? `Ask about ${locationData.city}'s climate data...`
@@ -634,64 +761,68 @@ Make the analysis specific to ${locationData.city} and current conditions.
 
         {/* Right Panel - Metrics & Charts */}
         <div className="bg-black/40 overflow-y-auto" style={{ width: `${rightPanelWidth}px`, minWidth: '300px', maxWidth: '800px' }}>
-          {hasLocationData ? (
+          {hasLocationData || (satelliteImages && satelliteImages.length > 0) ? (
             <div className="p-6 space-y-6">
-              {/* Location Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 rounded-2xl border border-white/10 p-5"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+              {/* Location Card - Only show if has location data */}
+              {hasLocationData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white/5 rounded-2xl border border-white/10 p-5"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">{locationData.city}</h3>
+                      <p className="text-sm text-white/50">{locationData.country}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">{locationData.city}</h3>
-                    <p className="text-sm text-white/50">{locationData.country}</p>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-white/5 rounded-lg p-3">
-                    <p className="text-white/40 text-xs mb-1">Latitude</p>
-                    <p className="text-white font-mono">{locationData.lat?.toFixed(4)}°</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-white/40 text-xs mb-1">Latitude</p>
+                      <p className="text-white font-mono">{locationData.lat?.toFixed(4)}°</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-white/40 text-xs mb-1">Longitude</p>
+                      <p className="text-white font-mono">{locationData.lng?.toFixed(4)}°</p>
+                    </div>
                   </div>
-                  <div className="bg-white/5 rounded-lg p-3">
-                    <p className="text-white/40 text-xs mb-1">Longitude</p>
-                    <p className="text-white font-mono">{locationData.lng?.toFixed(4)}°</p>
-                  </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              )}
 
-              {/* Current Reading Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className={`bg-white/5 rounded-2xl border ${(getDataType(locationData.pollutant) === 'air_quality' && aqiCategory) ? aqiCategory.borderColor : 'border-white/10'} p-5`}
-              >
-                <h4 className="text-sm font-medium text-white/60 mb-3 uppercase tracking-wider">
-                  Current {getPollutantLabel(locationData.pollutant)}
-                </h4>
-                <div className="flex items-end gap-3">
-                  <span className={`text-5xl font-bold ${(getDataType(locationData.pollutant) === 'air_quality' && aqiCategory) ? aqiCategory.color : 'text-white'}`}>
-                    {locationData.value?.toFixed(getDataType(locationData.pollutant) === 'forest' ? 2 : 1)}
-                  </span>
-                  <span className="text-white/50 mb-2">{getUnit(locationData.pollutant)}</span>
-                </div>
-                {getDataType(locationData.pollutant) === 'air_quality' && aqiCategory && (
-                  <div className={`mt-3 inline-block px-3 py-1 rounded-full text-sm font-medium ${aqiCategory.bg} ${aqiCategory.color}`}>
-                    {aqiCategory.label}
+              {/* Current Reading Card - Only show if has location data */}
+              {hasLocationData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className={`bg-white/5 rounded-2xl border ${(getDataType(locationData.pollutant) === 'air_quality' && aqiCategory) ? aqiCategory.borderColor : 'border-white/10'} p-5`}
+                >
+                  <h4 className="text-sm font-medium text-white/60 mb-3 uppercase tracking-wider">
+                    Current {getPollutantLabel(locationData.pollutant)}
+                  </h4>
+                  <div className="flex items-end gap-3">
+                    <span className={`text-5xl font-bold ${(getDataType(locationData.pollutant) === 'air_quality' && aqiCategory) ? aqiCategory.color : 'text-white'}`}>
+                      {locationData.value?.toFixed(getDataType(locationData.pollutant) === 'forest' ? 2 : 1)}
+                    </span>
+                    <span className="text-white/50 mb-2">{getUnit(locationData.pollutant)}</span>
                   </div>
-                )}
-              </motion.div>
+                  {getDataType(locationData.pollutant) === 'air_quality' && aqiCategory && (
+                    <div className={`mt-3 inline-block px-3 py-1 rounded-full text-sm font-medium ${aqiCategory.bg} ${aqiCategory.color}`}>
+                      {aqiCategory.label}
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
-              {/* Historical Data Chart */}
-              {historicalData && (
+              {/* Historical Data Chart - Only show if has location data */}
+              {hasLocationData && historicalData && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -726,6 +857,43 @@ Make the analysis specific to ${locationData.city} and current conditions.
                       <p className="text-xs text-white/50">Gathering environmental insights</p>
                     </div>
                   </div>
+                </motion.div>
+              )}
+
+              {/* Satellite Analysis Results - REMOVED, now in chat */}
+
+              {/* Satellite Visualization Images - Individual images stacked */}
+              {satelliteImages && satelliteImages.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-4"
+                >
+                  <h4 className="text-sm font-medium text-white/60 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Change Detection Visualizations ({satelliteImages.length})
+                  </h4>
+                  {satelliteImages.map((imageUrl, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-white/5 rounded-2xl border border-white/10 p-5"
+                    >
+                      <img 
+                        src={imageUrl} 
+                        alt={`Satellite Analysis ${index + 1}`} 
+                        className="w-full rounded-lg"
+                        onError={(e) => {
+                          e.target.onerror = null
+                          e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23374151" width="400" height="300"/%3E%3Ctext fill="%239CA3AF" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EVisualization Loading...%3C/text%3E%3C/svg%3E'
+                        }}
+                      />
+                    </motion.div>
+                  ))}
                 </motion.div>
               )}
 
@@ -826,50 +994,45 @@ Make the analysis specific to ${locationData.city} and current conditions.
                 </motion.div>
               )}
 
-              {/* Quick Actions */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="space-y-2"
-              >
-                <h4 className="text-sm font-medium text-white/40 uppercase tracking-wider mb-3">Ask More</h4>
-                <button
-                  onClick={() => handleSendMessage(`Show me a detailed breakdown of pollution sources in ${locationData.city}`)}
-                  disabled={isLoading || isAnalyzing}
-                  className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
+              {/* Quick Actions - Only show if has location data */}
+              {hasLocationData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="space-y-2"
                 >
-                  📊 Pollution source breakdown
-                </button>
-                <button
-                  onClick={() => handleSendMessage(`What are the seasonal pollution patterns in ${locationData.city}?`)}
-                  disabled={isLoading || isAnalyzing}
-                  className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
-                >
-                  📅 Seasonal patterns
-                </button>
-                <button
-                  onClick={() => handleSendMessage(`What government policies exist to combat air pollution in ${locationData.city}?`)}
-                  disabled={isLoading || isAnalyzing}
-                  className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
-                >
-                  🏛️ Government policies
-                </button>
-                <button
-                  onClick={() => handleSendMessage(`Predict future air quality trends for ${locationData.city} over the next 5 years`)}
-                  disabled={isLoading || isAnalyzing}
-                  className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
-                >
-                  🔮 Future predictions
-                </button>
-              </motion.div>
-
-              {/* Data Source */}
-              <div className="pt-4 border-t border-white/10">
-                <p className="text-xs text-white/30 text-center">
-                  Powered by <span className="text-emerald-400">Gemini AI</span> • Data from <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Open-Meteo</a>
-                </p>
-              </div>
+                  <h4 className="text-sm font-medium text-white/40 uppercase tracking-wider mb-3">Ask More</h4>
+                  <button
+                    onClick={() => handleSendMessage(`Show me a detailed breakdown of pollution sources in ${locationData.city}`)}
+                    disabled={isLoading || isAnalyzing}
+                    className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
+                  >
+                    📊 Pollution source breakdown
+                  </button>
+                  <button
+                    onClick={() => handleSendMessage(`What are the seasonal pollution patterns in ${locationData.city}?`)}
+                    disabled={isLoading || isAnalyzing}
+                    className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
+                  >
+                    📅 Seasonal patterns
+                  </button>
+                  <button
+                    onClick={() => handleSendMessage(`What government policies exist to combat air pollution in ${locationData.city}?`)}
+                    disabled={isLoading || isAnalyzing}
+                    className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
+                  >
+                    🏛️ Government policies
+                  </button>
+                  <button
+                    onClick={() => handleSendMessage(`Predict future air quality trends for ${locationData.city} over the next 5 years`)}
+                    disabled={isLoading || isAnalyzing}
+                    className="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white/70 hover:text-white transition-all text-sm border border-white/5 hover:border-white/10 disabled:opacity-50"
+                  >
+                    🔮 Future predictions
+                  </button>
+                </motion.div>
+              )}
             </div>
           ) : (
             /* No Location Data - Show General Info */
