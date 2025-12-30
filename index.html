@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Environmental Changes Viewer</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌍 Environmental Changes Viewer</h1>
+            <p class="subtitle">Visualize environmental changes using satellite data</p>
+        </header>
+        
+        <div class="controls">
+            <div class="control-row">
+                <div class="control-group">
+                    <label for="startYear">Start Year:</label>
+                    <select id="startYear">
+                        <option value="2018">2018</option>
+                        <option value="2019">2019</option>
+                        <option value="2020" selected>2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="endYear">End Year:</label>
+                    <select id="endYear">
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023" selected>2023</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="analysisType">Analysis Type:</label>
+                    <select id="analysisType">
+                        <option value="ndvi">🌱 Vegetation (NDVI)</option>
+                        <option value="ndwi">💧 Water Bodies (NDWI)</option>
+                        <option value="urban">🏙️ Urban Expansion</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="control-row">
+                <div class="control-group toggle-group">
+                    <span class="toggle-label">Data Source:</span>
+                    <div class="toggle-container">
+                        <span class="toggle-option">Simulated</span>
+                        <label class="switch">
+                            <input type="checkbox" id="useRealData">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-option">Real Data</span>
+                        <span class="info-icon" title="Real data uses AWS Open Data (Sentinel-2/Landsat 8)">ℹ️</span>
+                    </div>
+                </div>
+                
+                <button id="analyzeBtn" class="primary-btn">
+                    <span class="btn-icon">🔍</span> Analyze Area
+                </button>
+            </div>
+        </div>
+        </div>
+        <div id="map"></div>
+        <div id="results" class="hidden">
+            <h2>Analysis Results</h2>
+            <div id="timeline"></div>
+            <div id="stats"></div>
+        </div>
+    </div>
+
+    <!-- Load scripts -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
