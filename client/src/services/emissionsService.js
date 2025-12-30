@@ -1,19 +1,19 @@
 import axios from 'axios';
 
 const EMISSIONS_APIS = {
-  annualCO2: 'https://ourworldindata.org/grapher/annual-co2-emissions-per-country.json',
-  cumulativeCO2: 'https://ourworldindata.org/grapher/cumulative-co-emissions.json',
-  co2PerCapita: 'https://ourworldindata.org/grapher/co2-per-capita.json',
-  co2GrowthRate: 'https://ourworldindata.org/grapher/annual-co2-growth.json',
-  co2BySector: 'https://ourworldindata.org/grapher/co2-emissions-by-sector.json',
-  co2Transport: 'https://ourworldindata.org/grapher/co2-emissions-transport.json',
-  co2Electricity: 'https://ourworldindata.org/grapher/co2-emissions-electricity.json',
-  co2Intensity: 'https://ourworldindata.org/grapher/co2-intensity.json',
-  energyBySource: 'https://ourworldindata.org/grapher/energy-consumption-by-source-and-country.json',
-  fossilFuelCO2: 'https://ourworldindata.org/grapher/fossil-fuel-co2-emissions-by-fuel.json',
-  totalGHG: 'https://ourworldindata.org/grapher/total-ghg-emissions.json',
-  methane: 'https://ourworldindata.org/grapher/methane-emissions.json',
-  nitrousOxide: 'https://ourworldindata.org/grapher/nitrous-oxide-emissions.json'
+  annualCO2: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  cumulativeCO2: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2PerCapita: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2GrowthRate: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2BySector: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2Transport: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2Electricity: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  co2Intensity: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  energyBySource: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  fossilFuelCO2: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  totalGHG: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  methane: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json',
+  nitrousOxide: 'https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-data.json'
 };
 
 class EmissionsService {
@@ -22,7 +22,7 @@ class EmissionsService {
     this.cacheTimeout = 1000 * 60 * 60; // 1 hour cache
   }
 
-  // Fetch data from a specific API with caching
+  // Fetch data from GitHub with caching
   async fetchData(apiKey) {
     const now = Date.now();
     
@@ -44,86 +44,87 @@ class EmissionsService {
       return data;
     } catch (error) {
       console.error(`Error fetching ${apiKey} data:`, error);
-      throw error;
+      // Return empty object instead of throwing to prevent cascading failures
+      return {};
     }
   }
 
   // Get annual CO2 emissions
   async getAnnualCO2(country = null) {
     const data = await this.fetchData('annualCO2');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'co2') : data;
   }
 
   // Get cumulative CO2 emissions
   async getCumulativeCO2(country = null) {
     const data = await this.fetchData('cumulativeCO2');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'cumulative_co2') : data;
   }
 
   // Get CO2 per capita
   async getCO2PerCapita(country = null) {
     const data = await this.fetchData('co2PerCapita');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'co2_per_capita') : data;
   }
 
   // Get CO2 growth rate
   async getCO2GrowthRate(country = null) {
     const data = await this.fetchData('co2GrowthRate');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'co2_growth_prct') : data;
   }
 
   // Get CO2 by sector
   async getCO2BySector(country = null) {
     const data = await this.fetchData('co2BySector');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'co2_including_luc') : data;
   }
 
   // Get transport CO2
   async getTransportCO2(country = null) {
     const data = await this.fetchData('co2Transport');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'transport_co2') : data;
   }
 
   // Get electricity CO2
   async getElectricityCO2(country = null) {
     const data = await this.fetchData('co2Electricity');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'electricity_generation') : data;
   }
 
   // Get CO2 intensity
   async getCO2Intensity(country = null) {
     const data = await this.fetchData('co2Intensity');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'co2_per_gdp') : data;
   }
 
   // Get energy by source
   async getEnergyBySource(country = null) {
     const data = await this.fetchData('energyBySource');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'primary_energy_consumption') : data;
   }
 
   // Get fossil fuel CO2
   async getFossilFuelCO2(country = null) {
     const data = await this.fetchData('fossilFuelCO2');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'coal_co2') : data;
   }
 
   // Get total GHG emissions
   async getTotalGHG(country = null) {
     const data = await this.fetchData('totalGHG');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'total_ghg') : data;
   }
 
   // Get methane emissions
   async getMethaneEmissions(country = null) {
     const data = await this.fetchData('methane');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'methane') : data;
   }
 
   // Get nitrous oxide emissions
   async getNitrousOxideEmissions(country = null) {
     const data = await this.fetchData('nitrousOxide');
-    return country ? this.filterByCountry(data, country) : data;
+    return country ? this.getCountryData(data, country, 'nitrous_oxide') : data;
   }
 
   // Get all emissions data for a country
@@ -170,29 +171,49 @@ class EmissionsService {
     const alerts = [];
     
     try {
-      const growthData = await this.getCO2GrowthRate(country);
-      const latestGrowth = this.getLatestValue(growthData, country);
+      // Normalize country name (USA -> United States)
+      const normalizedCountry = this.normalizeCountryName(country);
       
-      if (latestGrowth && latestGrowth > 5) {
+      const data = await this.fetchData('annualCO2');
+      const countryData = data[normalizedCountry];
+      
+      if (!countryData || !countryData.data || countryData.data.length === 0) {
+        return alerts;
+      }
+
+      // Get latest year data
+      const latestData = countryData.data[countryData.data.length - 1];
+      
+      // Check CO2 growth
+      if (latestData.co2_growth_prct && latestData.co2_growth_prct > 5) {
         alerts.push({
           type: 'warning',
           severity: 'high',
           title: 'Rapid CO₂ Growth',
-          message: `${country} has experienced ${latestGrowth.toFixed(1)}% annual CO₂ growth`,
+          message: `${country} has experienced ${latestData.co2_growth_prct.toFixed(1)}% annual CO₂ growth`,
           icon: '⚠️'
         });
       }
 
-      const perCapitaData = await this.getCO2PerCapita(country);
-      const latestPerCapita = this.getLatestValue(perCapitaData, country);
-      
-      if (latestPerCapita && latestPerCapita > 10) {
+      // Check per capita emissions
+      if (latestData.co2_per_capita && latestData.co2_per_capita > 10) {
         alerts.push({
           type: 'warning',
           severity: 'medium',
           title: 'High Per Capita Emissions',
-          message: `${country} emits ${latestPerCapita.toFixed(1)} tonnes CO₂ per person`,
+          message: `${country} emits ${latestData.co2_per_capita.toFixed(1)} tonnes CO₂ per person`,
           icon: '🏭'
+        });
+      }
+
+      // Check total CO2 emissions
+      if (latestData.co2 && latestData.co2 > 1000) {
+        alerts.push({
+          type: 'info',
+          severity: 'low',
+          title: 'Major Emitter',
+          message: `${country} total emissions: ${(latestData.co2 / 1000).toFixed(1)}B tonnes CO₂ (${latestData.year})`,
+          icon: '📊'
         });
       }
 
@@ -203,30 +224,47 @@ class EmissionsService {
     }
   }
 
-  // Helper: Filter data by country
-  filterByCountry(data, country) {
-    if (!data || !data.data) return null;
+  // Helper: Normalize country names for API
+  normalizeCountryName(country) {
+    const mapping = {
+      'USA': 'United States',
+      'UK': 'United Kingdom',
+      'New York': 'United States',
+      'Los Angeles': 'United States',
+      'Chicago': 'United States',
+      'Mumbai': 'India',
+      'Delhi': 'India',
+      'Tokyo': 'Japan',
+      'London': 'United Kingdom',
+      'Paris': 'France',
+      'Berlin': 'Germany'
+    };
     
-    // Find entity matching country
-    const entityIndex = data.data.entities?.findIndex(
-      e => e.name.toLowerCase() === country.toLowerCase()
-    );
+    return mapping[country] || country;
+  }
+
+  // Helper: Get country data from OWID format
+  getCountryData(data, country, field) {
+    const normalizedCountry = this.normalizeCountryName(country);
+    const countryData = data[normalizedCountry];
     
-    if (entityIndex === -1) return null;
+    if (!countryData || !countryData.data) return null;
     
     return {
-      ...data,
-      filteredEntity: data.data.entities[entityIndex],
-      filteredData: data.data.values.filter(v => v.entity === entityIndex)
+      country: normalizedCountry,
+      data: countryData.data.map(entry => ({
+        year: entry.year,
+        value: entry[field]
+      })).filter(entry => entry.value !== null && entry.value !== undefined)
     };
   }
 
   // Helper: Get latest value for a country
-  getLatestValue(data, country) {
-    if (!data || !data.filteredData) return null;
+  getLatestValue(data, field = 'value') {
+    if (!data || !data.data || data.data.length === 0) return null;
     
-    const sorted = data.filteredData.sort((a, b) => b.year - a.year);
-    return sorted[0]?.value;
+    const sorted = data.data.sort((a, b) => b.year - a.year);
+    return sorted[0]?.[field];
   }
 }
 
