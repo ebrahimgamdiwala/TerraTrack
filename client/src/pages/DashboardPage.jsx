@@ -1,14 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Chart } from 'chart.js/auto';
-import { simulateEEAnalysis, getAnalysisDescription, getLocationInsights } from '../services/analysisService';
+import { simulateEEAnalysis, getAnalysisDescription } from '../services/analysisService';
 import MapComponent from '../components/MapComponent';
 import newsService from '../services/newsService';
+import { geminiService } from '../services/geminiService';
+import ReactMarkdown from 'react-markdown';
 
 function DashboardPageComponent() {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [loading, setLoading] = useState(false);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [locationInsights, setLocationInsights] = useState(null);
+  const [locationAddress, setLocationAddress] = useState(null);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
 
@@ -26,14 +31,85 @@ function DashboardPageComponent() {
   const fetchEnvironmentalNews = async () => {
     setNewsLoading(true);
     try {
-      const result = await newsService.getEnvironmentalNews({ pageSize: 6 });
+      // Fetch more articles with India priority (70% Indian news)
+      const result = await newsService.getEnvironmentalNews({ 
+        pageSize: 15, 
+        includeIndia: true,
+        indiaPriority: 0.7  // 70% Indian news
+      });
       if (result.success) {
         setNews(result.articles);
+        console.log(`Loaded ${result.indianCount || 0} Indian + ${result.globalCount || 0} global articles`);
       }
     } catch (error) {
       console.error('Error fetching news:', error);
     } finally {
       setNewsLoading(false);
+    }
+  };
+
+  // Reverse geocoding to get location address
+  const fetchLocationAddress = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`
+      );
+      const data = await res.json();
+      if (data && data.address) {
+        const { city, town, village, hamlet, county, state, region, country } = data.address;
+        const locationName = city || town || village || hamlet || county || state || region || 'Unknown Location';
+        const fullAddress = [
+          city || town || village || hamlet,
+          county,
+          state || region,
+          country
+        ].filter(Boolean).join(', ');
+        
+        return {
+          name: locationName,
+          fullAddress: fullAddress || data.display_name,
+          country: country || 'Unknown',
+          raw: data.address
+        };
+      }
+    } catch (err) {
+      console.error('Error fetching location address:', err);
+    }
+    return {
+      name: `Location (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`,
+      fullAddress: `Coordinates: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`,
+      country: 'Unknown',
+      raw: null
+    };
+  };
+
+  // Get AI analysis for the location using Gemini
+  const fetchAILocationAnalysis = async (address, lat, lng) => {
+    setAiAnalysisLoading(true);
+    try {
+      const query = `Provide a brief environmental analysis for ${address.fullAddress || address.name} (coordinates: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E). Include:
+1. General climate and ecosystem type
+2. Key environmental challenges in this region
+3. Notable environmental features or concerns
+4. Air quality and pollution trends if known
+5. Climate change impacts affecting this area
+
+Keep the response concise but informative.`;
+
+      const response = await geminiService.analyzeClimateQuery(query, true);
+      
+      if (response && response.content) {
+        setAiAnalysis(response);
+      }
+    } catch (error) {
+      console.error('Error fetching AI analysis:', error);
+      // Set a fallback analysis
+      setAiAnalysis({
+        content: `Environmental overview for ${address.name}. This location is at coordinates ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E. For detailed environmental analysis, please click "Analyze Point" after selecting your parameters.`,
+        sources: []
+      });
+    } finally {
+      setAiAnalysisLoading(false);
     }
   };
 
@@ -44,14 +120,23 @@ function DashboardPageComponent() {
     };
 
     setSelectedPoint(point);
+    setAiAnalysis(null);
+    setLocationInsights(null);
+    setAnalysisResults(null);
 
-    // Get location insights immediately when a point is selected
-    try {
-      const insights = await getLocationInsights(point.lat, point.lng);
-      setLocationInsights(insights);
-    } catch (error) {
-      console.error('Error fetching location insights:', error);
-    }
+    // Fetch location address using reverse geocoding
+    const address = await fetchLocationAddress(point.lat, point.lng);
+    setLocationAddress(address);
+    
+    // Get AI-powered location insights from Gemini
+    await fetchAILocationAnalysis(address, point.lat, point.lng);
+    
+    // Set basic location insights
+    setLocationInsights({
+      description: `${address.fullAddress}`,
+      coordinates: `${point.lat.toFixed(4)}°N, ${point.lng.toFixed(4)}°E`,
+      country: address.country
+    });
   }, []);
 
   const handleAnalyze = async () => {
@@ -72,6 +157,13 @@ function DashboardPageComponent() {
         analysisType,
         false
       );
+      
+      // Include location name in results for better context
+      if (locationAddress) {
+        results.locationName = locationAddress.name;
+        results.fullAddress = locationAddress.fullAddress;
+      }
+      
       setAnalysisResults(results);
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -141,7 +233,7 @@ function DashboardPageComponent() {
 
   const renderStats = () => {
     if (!analysisResults || !analysisResults.values || analysisResults.values.length === 0) return null;
-    const { values, startYear, endYear, location, analysisType, metricName } = analysisResults;
+    const { values, startYear, endYear, location, locationName, fullAddress, analysisType, metricName } = analysisResults;
     const startValue = values[0];
     const endValue = values[values.length - 1];
     const change = ((endValue - startValue) / Math.abs(startValue)) * 100;
@@ -154,6 +246,15 @@ function DashboardPageComponent() {
 
     return (
       <div className="space-y-6">
+        {/* Location Info */}
+        {(locationName || fullAddress) && (
+          <div className="p-4 bg-emerald-500/10 backdrop-blur-xl rounded-3xl border border-emerald-500/20 shadow-2xl">
+            <h3 className="text-lg font-semibold text-emerald-400 mb-2">📍 Analyzed Location</h3>
+            <p className="text-white/90 font-medium">{locationName || 'Selected Location'}</p>
+            {fullAddress && <p className="text-white/60 text-sm mt-1">{fullAddress}</p>}
+          </div>
+        )}
+
         {/* Summary Card */}
         <div className="p-4 bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl">
           <h3 className="text-lg font-semibold text-white mb-2">Analysis Summary</h3>
@@ -264,38 +365,73 @@ function DashboardPageComponent() {
           <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl p-6 hover:bg-white/15 transition-all duration-300 ease-out overflow-y-auto max-h-[75vh]">
             <h2 className="text-2xl font-bold text-white mb-4">Analysis Results</h2>
 
-            {/* Location Insights */}
-            {locationInsights && !analysisResults && (
-              <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
-                <h3 className="text-lg font-semibold text-white mb-2">📍 Location Overview</h3>
-                <p className="text-white/70">{locationInsights.description}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className="text-sm text-white/60">Elevation: <span className="text-white/80">{locationInsights.elevation}</span></div>
-                  <div className="text-sm text-white/60">Climate: <span className="text-white/80">{locationInsights.climate}</span></div>
-                  <div className="text-sm text-white/60">Land Use: <span className="text-white/80">{locationInsights.landUse}</span></div>
-                  <div className="text-sm text-white/60">Ecoregion: <span className="text-white/80">{locationInsights.ecoregion}</span></div>
+            {/* Location Insights - Always show when available */}
+            {locationInsights && (
+              <div className="mb-4 p-4 bg-white/5 rounded-2xl border border-white/10">
+                <h3 className="text-lg font-semibold text-white mb-2">📍 Analyzed Location</h3>
+                <p className="text-white font-medium">{locationAddress?.name || 'Selected Location'}</p>
+                <p className="text-white/70 text-sm mb-2">{locationInsights.description}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="text-sm text-white/60">Coordinates: <span className="text-white/80">{locationInsights.coordinates}</span></div>
+                  <div className="text-sm text-white/60">Country: <span className="text-white/80">{locationInsights.country}</span></div>
                 </div>
               </div>
             )}
 
+            {/* AI Analysis Section - Always show when available */}
+            {aiAnalysisLoading && (
+              <div className="mb-4 p-4 bg-white/5 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
+                  <span className="text-white/60 text-sm">Analyzing location with AI...</span>
+                </div>
+              </div>
+            )}
+            
+            {aiAnalysis && !aiAnalysisLoading && (
+              <div className="mb-4 p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/30">
+                <h4 className="text-lg font-semibold text-emerald-400 mb-3">🤖 AI Environmental Analysis</h4>
+                <div className="text-white/80 text-sm prose prose-sm prose-invert max-w-none prose-headings:text-emerald-400 prose-headings:text-base prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0">
+                  <ReactMarkdown>
+                    {typeof aiAnalysis.content === 'string' 
+                      ? aiAnalysis.content.substring(0, 1500)
+                      : 'Analysis available'}
+                  </ReactMarkdown>
+                </div>
+                {aiAnalysis.sources && aiAnalysis.sources.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-white/10">
+                    <p className="text-xs text-white/50">Sources: {aiAnalysis.sources.slice(0, 2).map(s => s.title).join(', ')}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Analysis Chart Section */}
             {loading ? (
-              <div className="flex justify-center items-center h-full min-h-[300px]">
+              <div className="flex justify-center items-center min-h-[200px]">
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent"></div>
               </div>
             ) : analysisResults ? (
-              <div className="space-y-6">
-                <div className="h-[250px]"><canvas id="timelineChart"></canvas></div>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">📊 Analysis Summary</h3>
+                <div className="h-[250px] bg-white/5 rounded-xl p-2"><canvas id="timelineChart"></canvas></div>
                 {renderStats()}
               </div>
-            ) : (
-              <div className="flex justify-center items-center h-full min-h-[300px] text-center text-white/70">
+            ) : !locationInsights ? (
+              <div className="flex justify-center items-center min-h-[200px] text-center text-white/70">
                 <div>
                   <div className="text-4xl mb-4">🌎</div>
                   <p>Click anywhere on the map to select a location</p>
                   <p className="text-sm mt-2">Then press "Analyze Point" to see detailed environmental analysis</p>
                 </div>
               </div>
-            )}
+            ) : !analysisResults && locationInsights ? (
+              <div className="flex justify-center items-center min-h-[100px] text-center text-white/70">
+                <div>
+                  <p className="text-sm">📊 Press <span className="text-emerald-400 font-semibold">"Analyze Point"</span> to see NDVI, temperature, and other environmental data</p>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
