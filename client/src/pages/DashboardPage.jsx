@@ -2,18 +2,40 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Chart } from 'chart.js/auto';
 import { simulateEEAnalysis, getAnalysisDescription, getLocationInsights } from '../services/analysisService';
 import GoogleMapComponent from '../components/GoogleMapComponent';
+import newsService from '../services/newsService';
 
 function DashboardPageComponent() {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [loading, setLoading] = useState(false);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [locationInsights, setLocationInsights] = useState(null);
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(false);
 
   const [startYear, setStartYear] = useState('2020');
   const [endYear, setEndYear] = useState('2023');
   const [analysisType, setAnalysisType] = useState('ndvi');
 
   const chartRef = useRef(null);
+
+  // Fetch environmental news on component mount
+  useEffect(() => {
+    fetchEnvironmentalNews();
+  }, []);
+
+  const fetchEnvironmentalNews = async () => {
+    setNewsLoading(true);
+    try {
+      const result = await newsService.getEnvironmentalNews({ pageSize: 6 });
+      if (result.success) {
+        setNews(result.articles);
+      }
+    } catch (error) {
+      console.error('Error fetching news:', error);
+    } finally {
+      setNewsLoading(false);
+    }
+  };
 
   const onMapClick = useCallback(async (e) => {
     const point = {
@@ -276,6 +298,47 @@ function DashboardPageComponent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Environmental News Section */}
+        <div className="mt-6 bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl p-6">
+          <h2 className="text-2xl font-bold text-white mb-4">📰 Latest Environmental News</h2>
+          {newsLoading ? (
+            <div className="flex justify-center items-center h-40">
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {news.slice(0, 6).map((article, index) => (
+                <a
+                  key={index}
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white/5 hover:bg-white/10 rounded-xl p-4 border border-white/10 transition-all duration-300 group"
+                >
+                  {article.urlToImage && (
+                    <img
+                      src={article.urlToImage}
+                      alt={article.title}
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
+                  <h3 className="text-sm font-semibold text-white mb-2 line-clamp-2 group-hover:text-emerald-400 transition">
+                    {article.title}
+                  </h3>
+                  <p className="text-xs text-white/60 line-clamp-2 mb-2">
+                    {article.description}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-white/50">
+                    <span>{article.source.name}</span>
+                    <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
