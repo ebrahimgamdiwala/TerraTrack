@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Chart } from 'chart.js/auto';
 import { simulateEEAnalysis, getAnalysisDescription, getLocationInsights } from '../services/analysisService';
-import GoogleMapComponent from '../components/GoogleMapComponent';
+import MapComponent from '../components/MapComponent';
 import newsService from '../services/newsService';
 
 function DashboardPageComponent() {
@@ -254,10 +254,9 @@ function DashboardPageComponent() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Map */}
           <div className="h-[50vh] lg:h-[75vh] bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden">
-            <GoogleMapComponent
+            <MapComponent
               selectedPoint={selectedPoint}
               onMapClick={onMapClick}
-              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
             />
           </div>
 
