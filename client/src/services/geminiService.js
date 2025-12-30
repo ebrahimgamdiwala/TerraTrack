@@ -470,11 +470,18 @@ Please generate **5-7 actionable environmental alerts** for the user.
         { role: 'user', parts: [{ text: prompt }] }
       ];
 
-      const response = await this.ai.models.generateContentStream({
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+
+      const responsePromise = this.ai.models.generateContentStream({
         model: this.model,
         config: this.config,
         contents
       });
+
+      const response = await Promise.race([responsePromise, timeoutPromise]);
 
       let fullResponse = '';
       for await (const chunk of response) {
@@ -486,11 +493,125 @@ Please generate **5-7 actionable environmental alerts** for the user.
 
     } catch (error) {
       console.error('Error getting location alerts:', error);
-      return [{
-        message: 'Unable to fetch environmental alerts at this time.',
-        severity: 'high',
-        category: 'system'
-      }];
+      
+      // Check for quota exceeded error
+      if (error.message?.includes('429') || error.message?.includes('quota')) {
+        console.warn('Gemini API quota exceeded. Using weather-based alerts only.');
+      }
+      
+      // Return empty array instead of error object to prevent component crash
+      return [];
+    }
+  }
+
+  // Get environmental data for location via web search
+  async getEnvironmentalData(locationName) {
+    try {
+      const prompt = `
+Search the web and provide REAL-TIME environmental data for ${locationName}. Return ONLY a valid JSON object with this exact structure:
+
+{
+  "airQuality": {
+    "aqi": <actual current AQI number>,
+    "level": "<Good/Moderate/Unhealthy/etc>",
+    "description": "<brief description>",
+    "pollutants": [
+      {"name": "PM2.5", "value": <number>, "unit": "μg/m³"},
+      {"name": "PM10", "value": <number>, "unit": "μg/m³"},
+      {"name": "Ozone", "value": <number>, "unit": "ppb"},
+      {"name": "NO2", "value": <number>, "unit": "ppb"},
+      {"name": "SO2", "value": <number>, "unit": "ppb"},
+      {"name": "CO", "value": <number>, "unit": "ppm"}
+    ],
+    "source": "<website URL>",
+    "lastUpdated": "<timestamp>"
+  },
+  "weather": {
+    "temperature": <number in Celsius>,
+    "feelsLike": <number>,
+    "humidity": <percentage>,
+    "pressure": <hPa>,
+    "windSpeed": <m/s>,
+    "condition": "<Clear/Cloudy/Rainy/etc>",
+    "description": "<detailed weather description>"
+  },
+  "alerts": [
+    {
+      "type": "<air/weather/health/etc>",
+      "severity": "<low/medium/high/critical>",
+      "title": "<alert title>",
+      "message": "<detailed alert message>",
+      "icon": "<emoji>",
+      "source": "<source URL>"
+    }
+  ],
+  "dataSource": "<primary source name>",
+  "fetchedAt": "<current timestamp>"
+}
+
+IMPORTANT:
+1. Search for ACTUAL current data from reliable sources (IQAir, AirVisual, weather.com, government sites)
+2. For ${locationName}, provide real measurements, not estimates
+3. Include at least 2-3 real alerts based on current conditions
+4. Ensure all numbers are realistic for ${locationName}
+5. Return ONLY the JSON object, no additional text
+`;
+
+      const contents = [
+        { role: 'user', parts: [{ text: prompt }] }
+      ];
+
+      const response = await this.ai.models.generateContentStream({
+        model: this.model,
+        config: {
+          responseMimeType: 'application/json',
+        },
+        contents
+      });
+
+      let fullResponse = '';
+      for await (const chunk of response) {
+        if (chunk.text) fullResponse += chunk.text;
+      }
+
+      const data = this.extractJSON(fullResponse);
+      return data || {
+        airQuality: { aqi: 0, level: "Unknown", description: "Data unavailable" },
+        weather: { temperature: 0, condition: "Unknown" },
+        alerts: []
+      };
+
+    } catch (error) {
+      console.error('Error getting environmental data from Gemini:', error);
+      
+      // Check for quota exceeded error
+      const isQuotaError = error.message?.includes('429') || 
+                          error.message?.includes('quota') || 
+                          error.message?.includes('RESOURCE_EXHAUSTED');
+      
+      return {
+        airQuality: { 
+          aqi: 0, 
+          level: isQuotaError ? "Quota Exceeded" : "Error", 
+          description: isQuotaError 
+            ? "Gemini API daily quota exceeded (20 requests/day). Please try again tomorrow."
+            : "Failed to fetch data" 
+        },
+        weather: { 
+          temperature: 0, 
+          condition: isQuotaError ? "Quota Exceeded" : "Error" 
+        },
+        alerts: [{
+          type: "system",
+          severity: isQuotaError ? "medium" : "high",
+          title: isQuotaError ? "⏰ API Quota Exceeded" : "⚠️ Data Unavailable",
+          message: isQuotaError 
+            ? "Gemini AI has reached its free tier limit of 20 requests per day. Quota resets in approximately 24 hours. Consider using direct API integrations or upgrading to a paid plan."
+            : "Unable to fetch environmental data at this time. The service may be experiencing issues.",
+          icon: isQuotaError ? "⏰" : "⚠️"
+        }],
+        isQuotaError: isQuotaError
+      };
     }
   }
 }
